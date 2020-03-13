@@ -5,7 +5,7 @@ box_muller_ameliore <- function(n){
       u <- runif(2,min = -1, max = 1)
       S = u[1]^2 + u[2]^2
       S > 1
-      }){}
+    }){}
     x = u[1] * sqrt(-2 * log(S)/S)
     y = u[2] * sqrt(-2 * log(S)/S)
     c(x, y)
@@ -18,16 +18,22 @@ box_muller_ameliore <- function(n){
 box_muller <- function(n){
   result <- sapply(1:n, function(i){
     u <- runif(2)
-    x = sinpi(2*u[1]) * sqrt(-2 * log(u[1]))
-    y = cospi(2*u[2]) * sqrt(-2 * log(u[1]))
+    x = cos(2*pi*u[1]) * sqrt(-2 * log(u[1]))
+    y = sin(2*pi*u[2]) * sqrt(-2 * log(u[1]))
     c(x, y)
   })
   result <- data.frame(t(result))
   colnames(result) <- c("X", "Y")
   result
 }
-simul_box_muller_amelio <- box_muller_ameliore(1000000)
-simul_box_muller <- box_muller(1000000)
+simul_box_muller_amelio <- box_muller_ameliore(10000)
+plot(density(simul_box_muller_amelio$X),
+     main = "X")
+plot(density(simul_box_muller_amelio$Y),
+     main = "Y")
+plot(simul_box_muller_amelio)
+simul_box_muller <- box_muller(10000)
+plot(simul_box_muller)
 
 microbenchmark::microbenchmark(`Version améliorée` = {
   box_muller_ameliore(10000)

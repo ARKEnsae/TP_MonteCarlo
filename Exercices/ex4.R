@@ -11,10 +11,11 @@ geometrique <- function(n, p){
     k
   })
 }
-p = 0.7
+p <- 0.7
 geo <- geometrique(10000, p)
-hist(geo)
 
+hist(geo, probability = TRUE)
+lines(density(geo), lwd = 2, col = "chocolate3")
 t.test(t, mu = 1/p)
 
 sd(t) - 1/p

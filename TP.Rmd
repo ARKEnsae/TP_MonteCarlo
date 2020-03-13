@@ -7,10 +7,15 @@ output:
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(echo = TRUE,
+                      cache = TRUE)
 library(knitr)
 library(rgl)
 knit_hooks$set(webgl = hook_webgl)
+```
+
+```{r}
+set.seed(0802)
 ```
 
 # Exercice 1 : RANDU
@@ -42,8 +47,8 @@ randu <- function(n, start = 1, return_u = TRUE){
   init1 = init0 * 65539 %% (2^31)
   
   if(return_u){
-    init0 = init0/65539
-    init1 = init1/65539   
+    init0 = init0 / 65539
+    init1 = init1 / 65539   
   }
 
   res = vector(length = n)
@@ -51,18 +56,18 @@ randu <- function(n, start = 1, return_u = TRUE){
   res[2] = init1
   modulo <- ifelse(return_u, 1, 2^31)
   for(i in seq_len(n-3)){
-    res[i+2] = (6*res[i+1] - 9 * res[i]) %% modulo
+    res[i+2] = (6 * res[i+1] - 9 * res[i]) %% modulo
   }
   res
 }
 simul <- randu(20000)
-head(simul,15)
+head(simul, 15)
 ```
 
 On ne garde maintenant que les valeurs telles que $0.5 \leq u_i \leq 0.51$ et on trace $u_i$ en fonction de $u_{i-2}$
 ```{r}
 val = zoo::rollapply(simul, width = 3, function(x){
-  if(0.5<=x[2] & x[2] <= 0.51){
+  if(0.5 <= x[2] & x[2] <= 0.51){
     return(c(x[1], x[3]))
   }
 })
@@ -80,7 +85,7 @@ toutes_donnees = zoo::rollapply(simul, width = 3, function(x){
   return(c(x[1],x[2], x[3]))
 })
 
-plot3d(toutes_donnees,col="red",
+plot3d(toutes_donnees, col = "red",
        xlab = expression(u[i-2]), 
        ylab = expression(u[i-1]), 
        zlab = expression(u[i])) 
@@ -92,12 +97,194 @@ plot3d(toutes_donnees,col="red",
 Lorsque l'on regarde les valeurs des $x_i$ en binaire, on remarque une faible périodicité.
 ```{r}
 simul_x <- randu(20000, return_u = FALSE)
-sapply(simul_x[1:30], function(x) paste(intToBits(x),collapse = ""))
+sapply(simul_x[1:30], function(x) paste(intToBits(x), collapse = ""))
 ```
 
 # Exercice 2 : Rejet et loi de Laplace
 
+### Question 1
+
+On va chercher à générer une loi de Laplace :
+$$
+p(x) = \frac{1}{2}\exp(- \lvert x \rvert)
+$$
+Pour simuler la loi de Laplace on va procéder de la façon suivante :
+
+1. Simuler une loi exponentielle $X \sim\mathcal E (1)$
+
+2. Simuler une loi uniforme $U \sim \mathcal U(0,1)$
+
+3. Si $U < 0,5$ on renvoie $X$, sinon $-X$
+
+Pour simuler la loi exponentielle on pourrait également utiliser la méthode de la fonction de répartition inverse. Pour rappel, cette méthode dit que si l'on a une loi $\mathbb P_X$ de fonction de répartition $F_X$ inversible alors, si $U\sim \mathcal U([0,1])$ alors $F_X^{-1}(U)\sim \mathbb P_X$ est une variable aléatoire de fonction de répartition $F_X$.
+
+Dans notre cas, si $X\sim\mathcal E(\lambda)$ alors $\DeclareMathOperator{\e}{e}F_X(t) = 1-\e^{-\lambda t}$. Donc :
+$$
+u = 1-\e^{-\lambda t} \iff t = - \frac{\ln(1-u)}{\lambda} \implies F_X^{-1}(U) = -\frac{\ln(1-U)}{\lambda}
+$$
+
+```{r}
+laplace <- function(n){
+  u = runif(n)
+  x = rexp(n)
+  data <- data.frame(u,x)
+  apply(data,1, function(v){
+    if(v[1] < 0.5)
+      return(v[2])
+    else
+      return(-v[2])
+  })
+  
+}
+plot(density(laplace(10000)))
+```
+
+### Question 3
+
+On veut maintenant générer une loi $\mathcal N(0,1)$ avec l'algorithme d'acceptation-rejet et la loi de Laplace. Pour cela on cherche $C$ telle que :
+$$
+\frac{f(x)}{p(x)} \leq C \text{ avec }f(x) =
+\frac{1}{\sqrt{2\pi}} \e^{-\frac{x^2}{2}}
+$$
+Calculons :
+\begin{align*}
+\frac{f(x)}{p(x)} &= \sqrt{\frac{2}{\pi}} \e ^{-\frac{x^2}{2} + \lvert x \rvert} \\
+&= \sqrt{\frac{2}{\pi}} \e ^{-\frac{x^2 + 2 \lvert x \rvert}{2}} \\
+&= \sqrt{\frac{2}{\pi}} \e ^{-\frac{(\lvert x \rvert -1)^2}{2}} \e^{\frac{1}{2}} \leq \sqrt{\frac{2}{\pi}} \e^{\frac{1}{2}} = C
+\end{align*}
+
+Donc, si $U\sim \mathcal U([0,1])$, $x$ est une réalisation d'une loi de Laplace, on accepte si $U \leq \frac{f(x)}{p(x)} \times C$.
+
+```{r}
+normal_laplace <- function(n){
+  sapply(1:n, function(n){
+    nonAccepte <- TRUE
+    while({
+      #On accepte si b1 <= b2
+      # donc on continue tant que b2 < b1
+      u <- runif(1)
+      x1 <- laplace(1)
+      
+      b1 <- sqrt(1/2*pi) * exp(1/2 - abs(x1))
+      b2 <- 1/sqrt(2*pi) * exp(-x1^2/2)
+      (u*b1 <= b2)
+    }){}
+    x1
+  })
+}
+plot(density(normal_laplace(10000)))
+```
+
+### Question 3
+
+Le taux d'acceptation est donné par :
+
+\begin{align*}
+C\times U\times p(x) \leq f(x) &\iff
+U  \sqrt{\frac{2}{\pi}} \e^{\frac{1}{2}} \frac{1}{2}\e^{- \lvert x \rvert} \leq \frac{1}{\sqrt{2\pi}} \e^{-\frac{x^2}{2}}
+\\ &\iff U \e^{\frac{1}{2}} \e^{- \lvert x \rvert} \leq \e^{-\frac{x^2}{2}} \\
+&\iff
+\log(U)  + \frac{1}{2} - \lvert x \rvert \leq -  \frac{x^2}{2} \\
+&\iff
+1 - 2 \lvert x \rvert + x^2 \leq - 2\log(U)  \\
+&\iff
+(\lvert x \rvert -1)^2 \leq - 2\log(U)
+\end{align*}
+
+
+```{r}
+normal_laplace2 <- function(n){
+  sapply(1:n, function(n){
+    nonAccepte <- TRUE
+    while({
+      #On accepte si b1 <= b2
+      # donc on continue tant que b2 < b1
+      u <- runif(1)
+      x1 <- laplace(1)
+      
+      (abs(x1) -1)^2 > -2*log(u)
+    }){}
+    x1
+  })
+}
+plot(density(normal_laplace2(10000)))
+```
+### Question 4
+
+Non on ne peut pas faire l'inverse (i.e. générer la loi de Laplace par rejet, en utilisant une loi Normale). En effet : 
+\begin{align*}
+\frac{p(x)}{f(x)} &= \sqrt{\frac{\pi}{2}} \e ^{-\lvert x \rvert + \frac{x^2}{2}} \\
+&= \sqrt{\frac{\pi}{2}} \e ^{\frac{(\lvert x \rvert -1)^2}{2}} \e^{-\frac{1}{2}}
+\underset{x\to \pm\infty}{\longrightarrow} + \infty
+\end{align*}
+
+On ne peut donc pas majorer le rapport et générer la loi de Laplace par rejet en utilisant une loi Normale
+
 # Exercice 3 : Box-Muller amélioré
+
+### Question 1
+
+On utilise la méthode de Box-Muller améliorée pour simuler une loi normale $\mathcal N(0,1)$ :
+
+- Générer $U_1,U_2 \sim U([-1,1])$ jusqu') ce que $U_1^2+U_2^2\leq1$.  
+- Renvoyer $X = U_1 \sqrt{-2\log(S)/S}$ et $Y = U_2 \sqrt{-2\log(S)/S}$ où $S = U_1^2+U_2^2$.
+
+### Question 2
+
+La méthode de Box-Muller standard simule $U_1,U_2 \sim U([0,1])$ et renvoie $X = \sqrt{-2\log(U_1)}\cos(2\pi U_2)$, $U = \sqrt{-2\log(U_1)}\sin(2\pi U_2)$
+
+```{r}
+box_muller_ameliore <- function(n){
+  result <- sapply(1:n, function(i){
+    
+    while({
+      u <- runif(2,min = -1, max = 1)
+      S = u[1]^2 + u[2]^2
+      S > 1
+    }){}
+    x = u[1] * sqrt(-2 * log(S)/S)
+    y = u[2] * sqrt(-2 * log(S)/S)
+    c(x, y)
+  })
+  result <- data.frame(t(result))
+  colnames(result) <- c("X", "Y")
+  result
+}
+
+box_muller <- function(n){
+  result <- sapply(1:n, function(i){
+    u <- runif(2)
+    x = cos(2*pi*u[1]) * sqrt(-2 * log(u[1]))
+    y = sin(2*pi*u[2]) * sqrt(-2 * log(u[1]))
+    c(x, y)
+  })
+  result <- data.frame(t(result))
+  colnames(result) <- c("X", "Y")
+  result
+}
+simul_box_muller_amelio <- box_muller_ameliore(10000)
+plot(density(simul_box_muller_amelio$X),
+     main = "X")
+plot(density(simul_box_muller_amelio$Y),
+     main = "Y")
+plot(simul_box_muller_amelio)
+simul_box_muller <- box_muller(10000)
+plot(simul_box_muller)
+
+microbenchmark::microbenchmark(`Version améliorée` = {
+  box_muller_ameliore(10000)
+},
+`Version classique` = {
+  box_muller(10000)
+},times = 100)
+
+# Ou
+# profvis::profvis({
+#   box_muller_ameliore(1000)
+#   simul_box_muller <- box_muller(1000000)
+# })
+```
+
 
 # Exercice 4 : Loi géométrique
 
@@ -115,9 +302,7 @@ geometrique <- function(n, p){
       u = runif(1)
       k = k+1
       
-      u>p}){
-      
-    }
+      u>p}){}
     k
   })
 }
