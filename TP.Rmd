@@ -1,0 +1,146 @@
+---
+title: "TP de Monte-Carlo"
+output: 
+  html_document:
+    toc: true
+    number_sections: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(knitr)
+library(rgl)
+knit_hooks$set(webgl = hook_webgl)
+```
+
+# Exercice 1 : RANDU
+
+On étudie le générateur suivant :
+
+$$
+x_i = 65539 x_{i-1} \mod 2^{31}
+$$
+et on pose $u_i = \frac{x_i}{2^{31}}$ comme générateur de loi uniforme.
+
+### Question 1   
+Montrons que $x_i = 6 x_{i-1} - 9 x_{i-2}$
+
+\begin{align*}
+x_i &= 65539 x_{i-1} \mod 2^{31} \\&= (2^{16} +3) x_{i-1} \mod 2^{31} \\
+&= (2^{16} +3)^2 x_{i-2} \mod 2^{31}\\& = (2^{32} +9 + 6\times 2^{16}) x_{i-2} \mod 2^{31} \\
+&= 6\times(2^{16} + 3) x_{i-2} - 9 x_{i-2} \mod 2^{31} \quad \text{ car $2^{32}x_{i-2}$ divisible par $2^{31}$} \\
+&= 6 x_{i-1} - 9 x_{i-2} \\ \text{Donc :}& \\
+u_i &= 6 u_{i-1} - 9 u_{i-2}
+\end{align*}
+
+
+### Question 2 
+
+```{r}
+randu <- function(n, start = 1, return_u = TRUE){
+  init0 = as.double(start)
+  init1 = init0 * 65539 %% (2^31)
+  
+  if(return_u){
+    init0 = init0/65539
+    init1 = init1/65539   
+  }
+
+  res = vector(length = n)
+  res[1] = init0
+  res[2] = init1
+  modulo <- ifelse(return_u, 1, 2^31)
+  for(i in seq_len(n-3)){
+    res[i+2] = (6*res[i+1] - 9 * res[i]) %% modulo
+  }
+  res
+}
+simul <- randu(20000)
+head(simul,15)
+```
+
+On ne garde maintenant que les valeurs telles que $0.5 \leq u_i \leq 0.51$ et on trace $u_i$ en fonction de $u_{i-2}$
+```{r}
+val = zoo::rollapply(simul, width = 3, function(x){
+  if(0.5<=x[2] & x[2] <= 0.51){
+    return(c(x[1], x[3]))
+  }
+})
+
+plot(val, xlab = expression(u[i-2]), ylab = expression(u[i]))
+```
+
+Toutes les valeurs sont sur certains hyperplans
+
+### Question 3
+
+```{r, webgl=TRUE}
+library(rgl)
+toutes_donnees = zoo::rollapply(simul, width = 3, function(x){
+  return(c(x[1],x[2], x[3]))
+})
+
+plot3d(toutes_donnees,col="red",
+       xlab = expression(u[i-2]), 
+       ylab = expression(u[i-1]), 
+       zlab = expression(u[i])) 
+```
+
+
+### Question 4
+
+Lorsque l'on regarde les valeurs des $x_i$ en binaire, on remarque une faible périodicité.
+```{r}
+simul_x <- randu(20000, return_u = FALSE)
+sapply(simul_x[1:30], function(x) paste(intToBits(x),collapse = ""))
+```
+
+# Exercice 2 : Rejet et loi de Laplace
+
+# Exercice 3 : Box-Muller amélioré
+
+# Exercice 4 : Loi géométrique
+
+La loi géométrique est une loi de probabilité discrète qui peut être définie comme la loi du nombre $X$ d'épreuves de Bernoulli indépendante de probabilité de succès $p \in ]0,1[$nécessaire pour obtenir le premier succès. $X$ est la variable aléatoire donnant le rang du premier succès.
+
+Pour $X \sim \mathcal G(p)$ on a $\mathbb P (X = k) = (1-p)^{k-1} p$.
+
+Pour générer une loi géométrique de paramètre $p$ il suffit donc de générer des lois de bernoulli $\mathcal B(p)$ et de compter le nombre de réalisations nécessaire avant d'obtenir un premier succès. Pour cela il suffit de générer une loi uniforme $U \sim \mathcal U([0,1])$ : on considère qu'il y a succès si $U \leq p$ (on a $\mathbb P(U \leq p) = p$).
+
+```{r}
+geometrique <- function(n, p){
+  sapply(1:n, function(i){
+    k=0
+    while({
+      u = runif(1)
+      k = k+1
+      
+      u>p}){
+      
+    }
+    k
+  })
+}
+p = 0.7
+geo <- geometrique(10000, p)
+hist(geo)
+```
+
+On a :
+$$
+\mathbb E[X] = \frac{1}{p} \quad\text{et}\quad\mathbb V[X] = \frac{1-p}{p^2}
+$$
+```{r}
+t.test(geo, mu = 1/p)
+t.test((geo - mean(geo))^2, mu = (1-p)/p^2)
+```
+
+# Exercice 5 : Control variates, variables antithétiques, QMC
+
+# Exercice 6 : Importance sampling
+
+# Exercice 7 : MCMC
+
+# Exercice 8 : Erreur de discrétisation dans le pricing d’option
+
+# Exercice 9 : Cross-Entropy Method
