@@ -322,6 +322,7 @@ t.test((geo - mean(geo))^2, mu = (1-p)/p^2)
 
 # Exercice 5 : Control variates, variables antithétiques, QMC
 
+
 # Exercice 6 : Importance sampling
 
 # Exercice 7 : MCMC
